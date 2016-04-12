@@ -7,10 +7,7 @@ from scipy import interpolate as sp
 from scipy.ndimage.filters import uniform_filter
 
 import sys, os
-try:
-    import Image
-except:
-    from PIL import Image
+
 
 def stdoutWrite(s):
     sys.stdout.write(s)
@@ -37,6 +34,7 @@ def statistics(arr, comment = ''):
 
 
 def showImage(arr):
+    from PIL import Image
     if(arr.ndim) != 2:
         sys.stderr.write('Must be a two dimensional array.\n')
         return False

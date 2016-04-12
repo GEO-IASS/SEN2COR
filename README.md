@@ -6,7 +6,7 @@ reflectance (Level 1C) data into Bottom of Atmoshperic corrected (Level 2A) data
 It additionally performs a Scene Classification of the corresponding input.
 
 sen2cor works under the Umbrella of Anaconda (Python 2.7)
-on the three platforms Mac OSX, Linux, and Windows 64-bit. This is mandatory! 
+on the three platforms Mac OSX, Linux, and Windows 64-bit -this is mandatory!
 
 This Software contains an IPR of DLR. This part is no Open Source and the
 module for the Atmospheric Correction is attached to this software in form

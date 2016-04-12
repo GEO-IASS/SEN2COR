@@ -19,7 +19,7 @@ class L2A_Schedule():
         self._targetDir = config.L2A_UP_DIR
         from L2A_Logger import LogQueueReader
         self._queue = Queue()
-        self._retVal = Queue()
+        self._msgQueue = Queue()
         log_queue_reader = LogQueueReader(self._queue)
         log_queue_reader.start()
 
@@ -43,10 +43,11 @@ class L2A_Schedule():
                     nrProc += 1
                     
                 if (len(procs) < nrProc):
-                    p = L2A_ProcessTile(tile, self._res, self._retVal, self._queue)
+                    p = L2A_ProcessTile(tile, self._res, self._msgQueue, self._queue)
                     try:
                         p.start()
                         procs.append(p)
+                        sleep(2)
                         break
                     except:
                         continue
@@ -67,7 +68,7 @@ class L2A_Schedule():
         
         ret = SUCCESS
         for q in procs:
-            q = self._retVal.get()
+            q = self._msgQueue.get()
             if q > 0:
                 ret = FAILURE
         return ret

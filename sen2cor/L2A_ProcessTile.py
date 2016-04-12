@@ -26,10 +26,10 @@ DEFAULT_LEVEL = logging.INFO
 
 
 class L2A_ProcessTile(multiprocessing.Process):
-    def __init__(self, tileId, res, retVal, queue):
+    def __init__(self, tileId, res, msgQueue, queue):
         multiprocessing.Process.__init__(self)
         self.queue = queue
-        self._retVal = retVal
+        self._msgQueue = msgQueue
         self._tileId = tileId
         self._finalRes = res
         self._scOnly = False
@@ -137,7 +137,7 @@ class L2A_ProcessTile(multiprocessing.Process):
                 self.logger.info('no scene classification processing for 10 m resolution in sc_only mode')   
                 tMeasure = time() - self.config.tStart
                 self.config.writeTimeEstimation(tMeasure)           
-                self._retVal.put(FAILURE)
+                self._msgQueue.put(FAILURE)
                 return False
             if self.process_20() == False:
                 return False
@@ -168,7 +168,7 @@ class L2A_ProcessTile(multiprocessing.Process):
             self.logger.info('no scene classification processing for 10 m resolution in sc_only mode')   
             tMeasure = time() - self.config.tStart
             self.config.writeTimeEstimation(tMeasure)           
-            self._retVal.put(FAILURE)
+            self._msgQueue.put(FAILURE)
             return False        
         
         res20 = 20
@@ -190,7 +190,7 @@ class L2A_ProcessTile(multiprocessing.Process):
         self.config.readTileMetadata()
         if self.tables.checkAotMapIsPresent(self.config.resolution):
             self.config.timestamp('L2A_ProcessTile: resolution '+ str(self.config.resolution) + 'm already processed')
-            self._retVal.put(SUCCESS)
+            self._msgQueue.put(SUCCESS)
             return True
         
         astr = 'L2A_ProcessTile: processing with resolution ' + str(self.config.resolution) + ' m'
@@ -198,31 +198,44 @@ class L2A_ProcessTile(multiprocessing.Process):
         self.config.timestamp('L2A_ProcessTile: start of pre processing')
         if(self.preprocess() == False):
             self.logger.fatal('Module %s - %s failed' %(p.name, self.config.L2A_TILE_ID))
-            self._retVal.put(FAILURE)
-          
+            self._msgQueue.put(FAILURE)
+            return False
+     
         if(self.config.resolution > 10):
             self.config.timestamp('L2A_ProcessTile: start of Scene Classification')
             sc = L2A_SceneClass(self.config, self.tables)
-            self.logger.info('Performing Scene Classification with resolution %d m' % self.config.resolution)
+            self.logger.info('performing Scene Classification with resolution %d m' % self.config.resolution)
             if(sc.process() == False):
                 self.logger.fatal('Module %s - %s failed' %(p.name, self.config.L2A_TILE_ID))
-                self._retVal.put(FAILURE)
-          
+                self._msgQueue.put(FAILURE)
+                return False
+           
         if(self.scOnly == False):
-            self.config.timestamp('L2A_ProcessTile: start of Atmospheric Correction')
-            self.logger.info('Performing Atmospheric Correction with resolution %d m' % self.config.resolution)
             ac = L2A_AtmCorr(self.config, self.tables)
+            if(self.config.resolution > 10):
+                if ((self.config.midLatitude == 'AUTO') or (self.config.aerosolType == 'AUTO')):
+                    self.config.timestamp('L2A_ProcessTile: start of Automatic Aerosol Type Detection')
+                    self.logger.info('performing aerosol type detection with resolution %d m' % self.config.resolution)
+                    if(ac.automaticAerosolDetection() == False):
+                        self.logger.fatal('Module %s - %s failed' %(p.name, self.config.L2A_TILE_ID))
+                        self._msgQueue.put(FAILURE)   
+                        return False                
+ 
+            self.config.timestamp('L2A_ProcessTile: start of Atmospheric Correction')
+            self.logger.info('performing Atmospheric Correction with resolution %d m' % self.config.resolution)
+            ac.aerosolDetection = False
             if(ac.process() == False):
                 self.logger.fatal('Module %s - %s failed' %(p.name, self.config.L2A_TILE_ID))
-                self._retVal.put(FAILURE)
-         
+                self._msgQueue.put(FAILURE)
+                return False
+          
         self.config.timestamp('L2A_ProcessTile: start of post processing')
         if(self.postprocess() == False):
             self.logger.fatal('Module %s - %s failed' %(p.name, self.config.L2A_TILE_ID))
-            self._retval.put(FAILURE)
+            self._msgQueue.put(FAILURE)
             return False
                  
-        self._retVal.put(SUCCESS)
+        self._msgQueue.put(SUCCESS)
         return True
  
  
@@ -244,7 +257,7 @@ class L2A_ProcessTile(multiprocessing.Process):
  
          
     def preprocess(self):
-        self.logger.info('Pre-processing with resolution %d m', self.config.resolution)
+        self.logger.info('pre-processing with resolution %d m', self.config.resolution)
         # this is to check the config for the L2A_AtmCorr in ahead.
         # This has historical reasons due to ATCOR porting.
         # Should be moved to the L2A_Config for better design:
@@ -259,15 +272,35 @@ class L2A_ProcessTile(multiprocessing.Process):
         if(self.tables.checkBandCount() == False):
             self.logger.fatal('insufficient nr. of bands in tile: ' + self.config.L2A_TILE_ID)
             return False
+
+        if(self.config.ozoneContent == '0'):
+            try:
+                ozoneMeasured = self.tables.getAuxData(self.tables.OZO)
+                self.config.ozoneMean = ozoneMeasured.mean()
+                self.logger.info('ozone mean value is: ' + str(self.config.ozoneMean))
+            except:
+                if self.config.midLatitude == 'SUMMER':
+                    self.logger.info('no ozone data present, standard mid summer will be used')
+                    self.config.ozoneContent = 'h'
+                elif self.config.midLatitude == 'WINTER':
+                    self.logger.info('no ozone data present, standard mid winter will be used')
+                    self.config.ozoneContent = 'w'
+                else:
+                    self.logger.info('no ozone data present and no mid latitude configured, standard mid summer will be used')
+                    self.config.ozoneContent = 'h'
+
         if(self.tables.importBandList() == False):
             self.logger.fatal('import of band list failed')
             return False
- 
+
+        if((self.config.aerosolType != 'AUTO') and (self.config.midLatitude != 'AUTO')):
+            self.config.createAtmDataFilename()
+
         return True
- 
+
  
     def postprocess(self):
-        self.logger.info('Post-processing with resolution %d m', self.config.resolution)
+        self.logger.info('post-processing with resolution %d m', self.config.resolution)
          
         res = True 
         if self.tables.exportBandList() == False:

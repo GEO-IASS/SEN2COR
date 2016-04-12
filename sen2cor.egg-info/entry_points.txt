@@ -1,5 +1,5 @@
 [console_scripts]
+L2A_Process-02.02.00 = sen2cor.L2A_Process:main
 L2A_Process = sen2cor.L2A_Process:main
-L2A_Process-02.01.02 = sen2cor.L2A_Process:main
-L2A_Process-2.1.2 = sen2cor.L2A_Process:main
+L2A_Process-2.2.0 = sen2cor.L2A_Process:main
 

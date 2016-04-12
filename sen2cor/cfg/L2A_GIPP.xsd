@@ -49,10 +49,12 @@
 		</xs:simpleType>
 	</xs:element>
 	
-	<xs:element name="References">
+	<xs:element name="Look_Up_Tables">
 		<xs:complexType>
 			<xs:sequence>
-				<xs:element ref="Atm_Data_Filename"/>
+				<xs:element ref="Aerosol_Type"/>
+				<xs:element ref="Mid_Latitude"/>
+				<xs:element ref="Ozone_Content"/>
 			</xs:sequence>
 		</xs:complexType>
 	</xs:element>
@@ -79,6 +81,65 @@
 				<xs:enumeration value="WARNING"/>
 				<xs:enumeration value="ERROR"/>
 				<xs:enumeration value="CRITICAL"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+
+	<xs:element name="Aerosol_Type"> <!-- can be: RURAL or MARITIME -->
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:enumeration value="RURAL"/>
+				<xs:enumeration value="MARITIME"/>
+				<xs:enumeration value="AUTO"/>				
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+
+	<xs:element name="Mid_Latitude"> <!-- can be: SUMMER or WINTER -->
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:enumeration value="SUMMER"/>
+				<xs:enumeration value="WINTER"/>
+				<xs:enumeration value="AUTO"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+
+	<xs:element name="Ozone_Content"> <!-- can be: 0, f-k, t-y
+        The atmospheric temperature profile and ozone content:
+      	"0" means: get best approximation from metadata (this is smallest difference between metadata and column DU)
+      	
+        For midlatitude summer atmosphere:
+        "f" 250 DU
+        "g" 290 DU
+        "h" 331 DU (standard MS)
+        "i" 370 DU
+        "j" 410 DU
+        "k" 450 DU
+        
+        For midlatitude winter atmosphere:
+        "t" 250 DU
+        "u" 290 DU
+        "v" 330 DU
+        "w" 377 DU (standard MW)
+        "x" 420 DU
+        "y" 460 DU
+       -->
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:enumeration value="0"/>
+				<xs:enumeration value="f"/>
+				<xs:enumeration value="g"/>
+				<xs:enumeration value="h"/>
+				<xs:enumeration value="i"/>
+				<xs:enumeration value="j"/>
+				<xs:enumeration value="k"/>
+				<xs:enumeration value="t"/>
+				<xs:enumeration value="u"/>
+				<xs:enumeration value="v"/>
+				<xs:enumeration value="w"/>
+				<xs:enumeration value="x"/>
+				<xs:enumeration value="y"/>
 			</xs:restriction>
 		</xs:simpleType>
 	</xs:element>
@@ -224,14 +285,7 @@
 			</xs:restriction>
 		</xs:simpleType>
 	</xs:element>
-	<xs:element name="Atm_Data_Filename">
-		<xs:simpleType>
-			<xs:restriction base="xs:string">
-				<xs:pattern value="\S*\.atm"/>
-			</xs:restriction>
-		</xs:simpleType>
-	</xs:element>
-
+	
 	<xs:element name="Scene_Classification">
 		<xs:complexType>
 			<xs:all>
@@ -251,7 +305,7 @@
 	<xs:element name="Atmospheric_Correction">
 		<xs:complexType>
 			<xs:all>
-				<xs:element ref="References"/>
+				<xs:element ref="Look_Up_Tables"/>
 				<xs:element ref="Flags"/>
 				<xs:element ref="Calibration"/>
 			</xs:all>

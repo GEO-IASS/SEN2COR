@@ -1,4 +1,4 @@
-<?xml version="1.0"  encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <Level-2A_Ground_Image_Processing_Parameter xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="L2A_GIPP.xsd">
   <Common_Section>
     <Log_Level>INFO</Log_Level>
@@ -27,9 +27,33 @@
     </Filters>
   </Scene_Classification>
   <Atmospheric_Correction>
-    <References>
-      <Atm_Data_Filename>h99000_wv20_rura.atm</Atm_Data_Filename>
-    </References>
+    <Look_Up_Tables>
+      <Aerosol_Type>RURAL</Aerosol_Type>
+      <!-- RURAL, MARITIME, AUTO -->
+      <Mid_Latitude>SUMMER</Mid_Latitude>
+      <!-- SUMMER, WINTER, AUTO -->
+      <Ozone_Content>h</Ozone_Content>
+      <!-- 0, f-k, t-y -->
+      <!-- The atmospheric temperature profile and ozone content:
+      	"0" means: get best approximation from metadata (this is smallest difference between metadata and column DU)
+      	
+        For midlatitude summer atmosphere:
+        "f" 250 DU
+        "g" 290 DU
+        "h" 331 DU (standard MS)
+        "i" 370 DU
+        "j" 410 DU
+        "k" 450 DU
+        
+        For midlatitude winter atmosphere:
+        "t" 250 DU
+        "u" 290 DU
+        "v" 330 DU
+        "w" 377 DU (standard MW)
+        "x" 420 DU
+        "y" 460 DU
+       -->
+    </Look_Up_Tables>
     <Flags>
       <WV_Correction>1</WV_Correction>
       <!-- 0: No WV correction, 1: only 940 nm bands, 2: only 1130 nm bands , 3: both regions used during wv retrieval, 4: Thermal region -->

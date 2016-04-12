@@ -1,15 +1,20 @@
 include README.txt
 include README.md
 include SETUP.pdf
-global-exclude L2A_AtmCorr.py L2A_TestUtils.py .DS_Store .estimation *_report.xml *.bak *.tmp *~
+global-exclude L2A_Process.spec L2A_AtmCorr.py L2A_TestUtils.py .DS_Store .estimation *_report.xml *.bak *.tmp *~
 recursive-include cfg *
-recursive-include sen2cor *
-
-exclude sen2cor/*.pyc sen2cor/*.c sen2cor/*.o sen2cor/L2A_AtmCorr.py
-graft cfg
+recursive-include sen2cor/lib *
+recursive-include sen2cor/cfg *
+exclude sen2cor/dist *
+exclude sen2cor/backup *
+exclude sen2cor/*.pyc sen2cor/*.c sen2cor/*.o
+graft sen2cor/build/lib.linux-x86_64-2.7
+graft sen2cor/build/lib.macosx-10.5-x86_64-2.7
+graft sen2cor/build/lib.win-amd64-2.7
+prune sen2cor/build/L2A_Process
+prune sen2cor/build/temp*
 prune dem
 prune log
 prune sen2cor/bin
 prune sen2cor/dem
 prune sen2cor/log
-prune sen2cor/build/temp*

@@ -29,8 +29,8 @@ class L2A_Config(object):
     
     def __init__(self, logger, sourceDir = False):
         self._processorName = 'Sentinel-2 Level 2A Prototype Processor (Sen2Cor)'
-        self._processorVersion = '2.1.2'
-        self._processorDate = '2016.02.26'
+        self._processorVersion = '2.2.0'
+        self._processorDate = '2016.03.31'
         self._productVersion = '13.1'
         self._logger = logger
         self._logLevel = 'INFO'
@@ -54,10 +54,7 @@ class L2A_Config(object):
             self.configSC = os.path.join(self._configDir, 'L2A_CAL_SC_GIPP.xml')
             self.configAC = os.path.join(self._configDir, 'L2A_CAL_AC_GIPP.xml')
             
-            self._calibrationFn = ''
-            self._solarIrradianceFn = ''
-            self._atmDataFn = ''
-            self._elevationMapFn = ''
+            self._atmDataFn = None
             self._tEst60 = 150.0
             self._tEst20 = self._tEst60 * 8.0
             self._tEst10 = self._tEst60 * 8.0
@@ -177,7 +174,72 @@ class L2A_Config(object):
             self._processed10 = False
             self._refresh = False
             self._selectedTile = None
+            self._aerosolType = None
+            self._midLatitude = None
+            self._ozoneContent = None
+            self._waterVapour = None    
+            self._ozoneMean = None        
             return
+
+    def get_ozone_mean(self):
+        return self._ozoneMean
+
+
+    def set_ozone_mean(self, value):
+        self._ozoneMean = value
+
+
+    def del_ozone_mean(self):
+        del self._ozoneMean
+
+
+    def get_aerosol_type(self):
+        return self._aerosolType
+
+
+    def get_mid_latitude(self):
+        return self._midLatitude
+
+
+    def get_ozone_content(self):
+        return self._ozoneContent
+
+
+    def get_water_vapour(self):
+        return self._waterVapour
+
+
+    def set_aerosol_type(self, value):
+        self._aerosolType = value
+
+
+    def set_mid_latitude(self, value):
+        self._midLatitude = value
+
+
+    def set_ozone_content(self, value):
+        self._ozoneContent = value
+
+
+    def set_water_vapour(self, value):
+        self._waterVapour = value
+
+
+    def del_aerosol_type(self):
+        del self._aerosolType
+
+
+    def del_mid_latitude(self):
+        del self._midLatitude
+
+
+    def del_ozone_content(self):
+        del self._ozoneContent
+
+
+    def del_water_vapour(self):
+        del self._waterVapour
+
 
     def get_processing_status_fn(self):
         return self._processingStatusFn
@@ -1575,58 +1637,6 @@ class L2A_Config(object):
         del self._ECMWF
 
 
-#     def __exit__(self):
-#         sys.exit(-1)
-
-
-    def get_output_fn(self):
-        return self._outputFn
-
-
-    def set_output_fn(self, value):
-        self._outputFn = os.path.join(self._dataDir, value)
-
-
-    def del_output_fn(self):
-        del self._outputFn
-
-
-    def get_solar_irradiance_fn(self):
-        return self._solarIrradianceFn
-
-
-    def set_solar_irradiance_fn(self, value):
-        self._solarIrradianceFn = value
-
-
-    def del_solar_irradiance_fn(self):
-        del self._solarIrradianceFn
-
-
-    def get_shadow_map_fn(self):
-        return self._shadowMapFn
-
-
-    def set_shadow_map_fn(self, value):
-        self._shadowMapFn = os.path.join(self._dataDir, value)
-
-
-    def del_shadow_map_fn(self):
-        del self._shadowMapFn
-
-
-    def get_sensor_fn(self):
-        return self._sensorFn
-
-
-    def set_sensor_fn(self, value):
-        self._sensorFn = value
-
-
-    def del_sensor_fn(self):
-        del self._sensorFn
-
-
     def get_home(self):
         return self._home
 
@@ -1675,10 +1685,6 @@ class L2A_Config(object):
         return self._atmDataFn
 
 
-    def get_calibr_fn(self):
-        return self._calibrationFn
-
-
     def get_class_map_fn(self):
         return self._classMapFn
 
@@ -1689,10 +1695,6 @@ class L2A_Config(object):
 
     def get_ddv_fn(self):
         return self._ddvFn
-
-
-    def get_elevation_map_fn(self):
-        return self._elevationMapFn
 
 
     def get_hcw_fn(self):
@@ -1977,10 +1979,6 @@ class L2A_Config(object):
         self._atmDataFn = value
 
 
-    def set_calibr_fn(self, value):
-        self._calibrationFn = value
-
-
     def set_class_map_fn(self, value):
         self._classMapFn =  os.path.join(self._dataDir, value)
 
@@ -1991,10 +1989,6 @@ class L2A_Config(object):
 
     def set_ddv_fn(self, value):
         self._ddvFn =  os.path.join(self._dataDir, value)
-
-
-    def set_elevation_map_fn(self, value):
-        self._elevationMapFn =  os.path.join(self._dataDir, value)
 
 
     def set_hcw_fn(self, value):
@@ -2295,10 +2289,6 @@ class L2A_Config(object):
         del self._atmDataFn
 
 
-    def del_calibr_fn(self):
-        del self._calibrationFn
-
-
     def del_class_map_fn(self):
         del self._classMapFn
 
@@ -2309,10 +2299,6 @@ class L2A_Config(object):
 
     def del_ddv_fn(self):
         del self._ddvFn
-
-
-    def del_elevation_map_fn(self):
-        del self._elevationMapFn
 
 
     def del_hcw_fn(self):
@@ -2612,10 +2598,6 @@ class L2A_Config(object):
     configSC = property(get_config_sc, set_config_sc, del_config_sc, "configSC's docstring")
     configAC = property(get_config_ac, set_config_ac, del_config_ac, "configAC's docstring")
     atmDataFn = property(get_atm_data_fn, set_atm_data_fn, del_atm_data_fn, "atmDataFn's docstring")
-    calibrationFn = property(get_calibr_fn, set_calibr_fn, del_calibr_fn, "calibrationFn's docstring")
-    sensorFn = property(get_sensor_fn, set_sensor_fn, del_sensor_fn, "sensorFn's docstring")
-    solarIrradianceFn = property(get_solar_irradiance_fn, set_solar_irradiance_fn, del_solar_irradiance_fn, "solarIrradianceFn's docstring")
-    elevationMapFn = property(get_elevation_map_fn, set_elevation_map_fn, del_elevation_map_fn, "elevationMapFn's docstring")
     adj_km = property(get_adj_km, set_adj_km, del_adj_km, "adj_km's docstring")
     beta_thr = property(get_beta_thr, set_beta_thr, del_beta_thr, "beta_thr's docstring")
     ch940 = property(get_ch_940, set_ch_940, del_ch_940, "ch940's docstring")
@@ -2778,7 +2760,12 @@ class L2A_Config(object):
     nrProcs = property(get_nr_procs, set_nr_procs, del_nr_procs, "nrProcs's docstring")
     processingStatusFn = property(get_processing_status_fn, set_processing_status_fn, del_processing_status_fn, "processingStatusFn's docstring")
     processingEstimationFn = property(get_processing_estimation_fn, set_processing_estimation_fn, del_processing_estimation_fn, "processingEstimationFn's docstring")
-
+    aerosolType = property(get_aerosol_type, set_aerosol_type, del_aerosol_type, "aerosolType's docstring")
+    midLatitude = property(get_mid_latitude, set_mid_latitude, del_mid_latitude, "midLatitude's docstring")
+    ozoneContent = property(get_ozone_content, set_ozone_content, del_ozone_content, "ozoneContent's docstring")
+    waterVapour = property(get_water_vapour, set_water_vapour, del_water_vapour, "waterVapour's docstring")
+    ozoneMean = property(get_ozone_mean, set_ozone_mean, del_ozone_mean, "ozoneMean's docstring")
+    
     def createOrUpdateL2A_UserProduct(self):
         firstInit = False
         L1C_UP_MASK = '*1C_*'
@@ -3576,13 +3563,23 @@ class L2A_Config(object):
         
     ### Atmospheric Correction:
     ### References:
-        node = xp.getTree('Atmospheric_Correction', 'References')
+        node = xp.getTree('Atmospheric_Correction', 'Look_Up_Tables')
         if node is None: self.parNotFound(node)
         
-        par = node.Atm_Data_Filename
-        if par is None: self.parNotFound(par)
-        self.atmDataFn = par.text
-        self.atmDataFn = os.path.join(libDir,self.atmDataFn)    
+        if self.aerosolType == None:
+            par = node.Aerosol_Type
+            if par is None: self.parNotFound(par)
+            self.aerosolType = par.text
+        
+        if self.midLatitude == None:
+            par = node.Mid_Latitude
+            if par is None: self.parNotFound(par)
+            self.midLatitude = par.text
+        
+        if self.ozoneContent == None:
+            par = node.Ozone_Content
+            if par is None: self.parNotFound(par)
+            self.ozoneContent = par.text
         
     ### Flags:
         node = xp.getTree('Atmospheric_Correction', 'Flags')
@@ -3906,4 +3903,68 @@ class L2A_Config(object):
             nrTiles += 1
         return nrTiles
 
+    
+    def createAtmDataFilename(self):
+        extension = '.atm'
+        height = '99000_'
+        if self.midLatitude == 'SUMMER':
+            waterVapour = 'wv20_'
+        elif self.midLatitude == 'WINTER':
+            waterVapour = 'wv04_'
+        elif self.midLatitude == 'AUTO':
+            waterVapour = 'wv00_'
+        else:
+            waterVapour = 'wv20_' # default
+                      
+        par = self.aerosolType
+        if par == 'RURAL':
+            aerosolType = 'rura'
+        elif par == 'MARITIME':
+            aerosolType = 'mari'
+        elif par == 'AUTO':
+            aerosolType = 'auto'
+        else:
+            aerosolType = 'rura' # default
+            
+        if self.resolution == 10:
+            libDir = os.path.join(self.libDir,'10')
+        else:
+            libDir = os.path.join(self.libDir,'20_60')            
 
+        par = self.ozoneContent
+        if par == '0':
+            ozoneContent = self.assignOzoneContent()
+        else:
+            ozoneContent = par
+        
+        atmDataFn = ozoneContent + height + waterVapour + aerosolType + extension
+        self.logger.info('generated file name for look up tables is: ' + atmDataFn)
+        self.atmDataFn = os.path.join(libDir, atmDataFn)
+        return True
+
+
+    def assignOzoneContent(self):
+        # get the ozone value from metadata:
+        columns = None
+        ozoneMeasured = self.ozoneMean
+        if self.midLatitude == 'SUMMER':
+            columns = {
+                       "f": abs(250 - ozoneMeasured),
+                       "g": abs(290 - ozoneMeasured),
+                       "h": abs(331 - ozoneMeasured),
+                       "i": abs(370 - ozoneMeasured),
+                       "j": abs(410 - ozoneMeasured),
+                       "k": abs(450 - ozoneMeasured)
+                       }    
+        elif self.midLatitude == 'WINTER':
+            columns = {
+                       "t": abs(250 - ozoneMeasured),
+                       "u": abs(290 - ozoneMeasured),
+                       "v": abs(330 - ozoneMeasured),
+                       "w": abs(377 - ozoneMeasured),
+                       "x": abs(420 - ozoneMeasured),
+                       "y": abs(460 - ozoneMeasured)                       
+                       }
+
+        ozoneContent = min(columns, key=columns.get)
+        return ozoneContent

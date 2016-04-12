@@ -6,18 +6,18 @@ Created on Feb 24, 2012
 import fnmatch
 import warnings
 import subprocess
-import sys, os, tempfile, logging
+import sys, os, tempfile, logging, shutil
 import glob
-from PIL import Image
+from L2A_Library import *
 from time import sleep
 import glymur
-
+from skimage.measure import block_reduce
+from skimage.transform import resize as skit_resize
 from tables import *
 from numpy import *
 from tables.description import *
 from shutil import copyfile, copytree
 from scipy.ndimage.interpolation import zoom
-from L2A_Library import *
 from lxml import etree, objectify
 from L2A_XmlParser import L2A_XmlParser
 
@@ -54,6 +54,8 @@ class L2A_Tables(object):
     def __init__(self, config):
         self._config = config
         self._logger = config.logger
+        self._DEV0 = None
+        self._SHELL = None
         L1C_UP_MASK = '*1C_*'
 
         AUX_DATA = 'AUX_DATA'
@@ -65,11 +67,17 @@ class L2A_Tables(object):
 
         if self._logger.level == logging.DEBUG:
             self._DEV0 = ''
+            if os.name == 'posix':
+                self._SHELL = True
+            else:
+                self._SHELL = False
         else:
             if os.name == 'posix':
                 self._DEV0 = ' &>/dev/null'
+                self._SHELL = True
             else:
-                self._DEV0 = ' > nul 2>&1'
+                self._DEV0 = ''
+                self._SHELL = False
         # Resolution:
         self._resolution = int(self.config.resolution)
         if(self._resolution == 10):
@@ -171,6 +179,13 @@ class L2A_Tables(object):
                     copyfile(configFn, target)
                 except:
                     self.logger.error('cannot copy configuration to %s' % target)
+                    
+        filelist = sorted(os.listdir(self._L2A_AuxDataDir))
+        filemask = 'S2A_*'
+        for filenameAux in filelist:
+            if fnmatch.fnmatch(filenameAux, filemask) == True:
+                self.aux_src=filenameAux
+                break   
 
         if(os.path.exists(self._L2A_QualityDataDir) == False):
             os.makedirs(self._L2A_QualityDataDir)  
@@ -968,11 +983,15 @@ class L2A_Tables(object):
         # yes it is, run dem preparation for DTED:
         if DTED == True:
             if(self.gdalDEM_dted() == False):
-                return False
+                self.config.demDirectory = 'NONE'
+                # continue with flat surface ...
+                return True
                       
         else: # run DEM preparation for SRTM:
             if(self.gdalDEM_srtm() == False):
-                return False
+                self.config.demDirectory = 'NONE'
+                # continue with flat surface ...
+                return True
 
         # generate hill shadow, slope and aspect using DEM:
         if(self.gdalDEM_Shade() == False):
@@ -1084,22 +1103,30 @@ class L2A_Tables(object):
         ozoneFactor = 155.5694 # 1/6.428 E-3
         standardOzoneColumn = 300.0
         
-        straux_src = os.path.join(self._L2A_AuxDataDir, self.aux_src)        
-        dataSet = gdal.Open(straux_src, GA_ReadOnly)
-        try:
-            band = dataSet.GetRasterBand(bandIndex)
-            arr = BandReadAsArray(band) 
-            if bandIndex == 3: # recalculate to 300 DU:
-                arr = arr * standardOzoneColumn * ozoneFactor
-        except:
-            self.logger.error('error in reading aux data from band %s' % self.getBandNameFromIndex(bandIndex))            
-            return False
-        
-        return arr
+        straux_src = os.path.join(self._L2A_AuxDataDir, self.aux_src)
+        curdir = os.path.curdir
+        head, tail = os.path.split(straux_src)
+        l.acquire()
+        os.chdir(head)
+        arr = False
+        while True:
+            try:
+                dataSet = gdal.Open(tail, GA_ReadOnly)
+                band = dataSet.GetRasterBand(bandIndex)
+                arr = BandReadAsArray(band)
+                if bandIndex == 3: # recalculate to 300 DU:
+                    arr = arr * standardOzoneColumn * ozoneFactor
+                break
+            except:
+                self.logger.error('error in reading aux data from band %s' % self.getBandNameFromIndex(bandIndex))
+            finally:
+                os.chdir(curdir)
+                l.release()
+                return arr
 
     
     def gdalDEM_dted(self):
-        demDir = self.config._demDirectory
+        demDir = self.config.demDirectory
         if demDir == 'NONE':
             self.logger.info('DEM directory not specified, flat surface is used')
             return False
@@ -1142,8 +1169,6 @@ class L2A_Tables(object):
             else:
                 lonMask = lonMask + '0'
         
-        command = 'gdalwarp '
-        arguments = '-ot Int16 '
         srtmf_src = ''
         
         filelist = sorted(os.listdir(sourceDir))
@@ -1160,7 +1185,7 @@ class L2A_Tables(object):
                             
         if found == False:  
             self.logger.info('DEM not found, flat surface is used')
-            return False          
+            return False
 
         hcsCode = tg.HORIZONTAL_CS_CODE.text
         t_srs = '-t_srs ' + hcsCode
@@ -1173,17 +1198,15 @@ class L2A_Tables(object):
             os.remove(self._TmpFile)
 
         tmpFile = os.path.join(sourceDir, 'srtm_' + self.config.L2A_TILE_ID + '.tif')
-        callstr = command + arguments + t_srs + t_warp + srtmf_src + ' ' + tmpFile
-
-        l.acquire()
+        command = 'gdalwarp '
+        arguments = '-ot Int16 '
+        callstr = command + arguments + t_srs + t_warp + srtmf_src + ' ' + tmpFile + self._DEV0
         try:
             if(os.path.isfile(tmpFile) == True):
                 os.remove(tmpFile)
             if(os.path.isfile(self._TmpFile) == True):
                 os.remove(self._TmpFile)
-                
-            p = subprocess.check_output(callstr, shell=True)
-            stdoutWrite(p)
+            subprocess.call(callstr, shell=self._SHELL)
         except:
             stderrWrite('Error reading DEM, flat surface will be used.\n')
             self.logger.fatal('Error reading DEM, flat surface will be used')
@@ -1208,10 +1231,12 @@ class L2A_Tables(object):
     
     
     def gdalDEM_srtm(self):
-        import urllib
+        import urllib, urllib2
         import zipfile
+        import multiprocessing
+        p = multiprocessing.current_process()
  
-        demDir = self.config._demDirectory
+        demDir = self.config.demDirectory
         if demDir == 'NONE':
             self.logger.info('DEM directory not specified, flat surface is used')
             return False
@@ -1238,66 +1263,71 @@ class L2A_Tables(object):
         lonMaxId = int((-180-lonMax)/(-360)*72)+1
         latMinId = int((60-latMax)/(120)*24)+1 # this is inverted by intention
         latMaxId = int((60-latMin)/(120)*24)+1 # this is inverted by intention
- 
+
         if(lonMinId < 1) or (lonMaxId > 72) or (latMinId < 1) or (latMaxId > 24):
             self.logger.error('no SRTM dataset available for this tile, flat surface will be used')
+            stdoutWrite('no SRTM dataset available for this tile, flat surface will be used')
             return False
 
         for i in range(lonMinId, lonMaxId+1):
             for j in range(latMinId, latMaxId+1):        
                 tifFn = 'srtm_{:0>2d}_{:0>2d}.tif'.format(i,j)
                 zipFn = 'srtm_{:0>2d}_{:0>2d}.zip'.format(i,j)
+                tmpDir = 'srtm_{:0>2d}_{:0>2d}_tmp'.format(i,j)
                 tifFn_path = os.path.join(sourceDir,tifFn)
                 zipFn_path = os.path.join(sourceDir,zipFn)
-                
-                if(os.path.isfile(tifFn_path) == True):
-                    self.logger.info('DEM exists: %s', tifFn_path)
-                    continue # tiffile exists, no action necessary
-                
-                elif(os.path.isfile(zipFn_path) == False):
-                    # zipfile needs to be downloaded ...
-                    prefix = self.config._demReference
-                    stdoutWrite('Trying to retrieve DEM from URL %s this may take some time ...\n' % prefix)
-                    self.logger.info('Trying to retrieve DEM from URL: %s', prefix)
-                    url = prefix + zipFn
-                    l.acquire()                        
+                tmpDir = os.path.join(sourceDir,tmpDir)
+                     
+                while True:           
                     try:
-                        webFile = urllib.urlopen(url)
-                        localFile = open(os.path.join(sourceDir, url.split('/')[-1]), 'wb')
-                        localFile.write(webFile.read())
-                        webFile.close()
-                        localFile.close()  
-                    except:
-                        stderrWrite('No network connection or timeout, flat surface will be used.\n')
-                        self.logger.error('No network connection or timeout, flat surface will be used')
-                        return False
-                    finally:
-                        l.release()
-                
-                else: # zipfile meanwhile extracted from a different process ...
-                    if(os.path.isfile(tifFn_path) == True):
-                        self.logger.info('DEM exists: %s', tifFn_path)
-                        continue # tiffile exists, no action necessary
-                    
-                    l.acquire()
-                    try:
-                        zipf = zipfile.ZipFile(zipFn_path, mode='r')
-                        for subfile in zipf.namelist():
-                            zipf.extract(subfile,sourceDir)
-                        zipf.close()
-                        while True:
-                            if(os.path.isfile(tifFn_path) == True):
-                                self.logger.info('DEM unpacked: %s', tifFn_path)
+                        # does the tiff file already exist?
+                        with open (tifFn_path) as fp:
+                            if self.logger.level == logging.DEBUG: 
+                                print p.pid, 'DEM exist: %s', tifFn_path
+                            break
+                        
+                    except IOError:
+                        # block the zip download for the other processes:
+                        if not os.path.isdir(tmpDir):
+                            os.makedirs(tmpDir)
+                            tifFn_src = os.path.join(tmpDir, tifFn)
+                            try:
+                                # zipfile needs to be downloaded ...
+                                if self.logger.level == logging.DEBUG: 
+                                    print p.pid, 'read zipfile ...'
+                                prefix = self.config._demReference
+                                stdoutWrite('Trying to retrieve DEM from URL %s this may take some time ...\n' % prefix)
+                                self.logger.info('Trying to retrieve DEM from URL: %s', prefix)
+                                url = prefix + zipFn
+                                webFile = urllib.urlopen(url)
+                                localFile = open(os.path.join(sourceDir, url.split('/')[-1]), 'wb')
+                                localFile.write(webFile.read())
+                                webFile.close()
+                                localFile.close()
+                                if self.logger.level == logging.DEBUG: 
+                                    print p.pid, 'zip downloaded.'
+                            except urllib2.URLError as e:
+                                stderrWrite('Download error %s, flat surface will be used.\n' % e.reason)
+                                self.logger.error('Download error %s, flat surface will be used' % e.reason)
+                                return True
+
+                            zipf = zipfile.ZipFile(zipFn_path, mode='r')
+                            if(zipf.testzip() == None):
+                                zipf.extractall(tmpDir)
+                                zipf.close()
+                                os.rename(tifFn_src, tifFn_path)
+                                self.logger.info('DEM unpacked and moved: %s', tifFn_path)
+                                if self.logger.level == logging.DEBUG: 
+                                    print p.pid, 'DEM unpacked and moved: %s', tifFn_path
+                                shutil.rmtree(tmpDir)
+                                os.remove(zipFn_path)                    
+                                if self.logger.level == logging.DEBUG: 
+                                    print p.pid, 'zipfile removed: %s', zipf
                                 break
-                            else:
-                                sleep(1)
-                                continue
-                    except:
-                        stderrWrite('Zip file %s is corrupt, flat surface will be used.\n' % zipFn_path)
-                        self.logger.error('Zip file %s is corrupt, flat surface will be used' % zipFn_path)
-                        return False               
-                    finally:
-                        l.release()
+                        else:
+                            if self.logger.level == logging.DEBUG: 
+                                print p.pid, 'wait for termination of download ...'
+                            sleep(1)
  
         command = 'gdalwarp '
         arguments = '-ot Int16 '
@@ -1310,35 +1340,29 @@ class L2A_Tables(object):
                 for j in range(latMinId, latMaxId+1):
                     tifFn = os.path.join(sourceDir,'srtm_{:0>2d}_{:0>2d}.tif'.format(i,j))
                     arguments += tifFn + ' '
-                    while True:
-                        if(os.path.isfile(tifFn) == True):
-                            break
-                        else:
-                            sleep(1) 
-                            continue
  
             srtmf_src = os.path.join(sourceDir, 'srtm_' + self.config.L2A_TILE_ID + '_src.tif')
             if(os.path.isfile(srtmf_src) == True):
                 os.remove(srtmf_src)
-
-            callstr = command + arguments + srtmf_src
+            callstr = command + arguments + srtmf_src  + self._DEV0
             l.acquire()
             try:
-                p = subprocess.check_output(callstr, shell=True)
-                stdoutWrite(p)
+                subprocess.call(callstr, shell=self._SHELL)
             except:
                 stderrWrite('shell execution error using gdalwarp.\n')
                 self.logger.fatal('shell execution error using gdalwarp')
                 return False
             finally:
-                l.release()    
+                l.release()
 
         while True:
-            if(os.path.isfile(srtmf_src) == True):
-                break
-            else:
+            try:
+                with open (srtmf_src) as fp:
+                    break
+            except:
+                if self.logger.level == logging.DEBUG:
+                    print(p.pid, 'waiting for DEM extraction ...')
                 sleep(1)
-                continue
                                 
         hcsCode = tg.HORIZONTAL_CS_CODE.text
         t_srs = '-t_srs ' + hcsCode
@@ -1348,13 +1372,10 @@ class L2A_Tables(object):
         t_warp = te + tr + ' -r cubicspline '
         arguments = '-ot Int16 '
         tmpFile = os.path.join(sourceDir, 'srtm_' + self.config.L2A_TILE_ID + '.tif')
-        if(os.path.isfile(tmpFile) == True):
-            os.remove(tmpFile)
-        callstr = command + arguments + t_srs + t_warp + srtmf_src + ' ' + tmpFile
+        callstr = command + arguments + t_srs + t_warp + srtmf_src + ' ' + tmpFile + self._DEV0
         l.acquire()
         try:
-            p = subprocess.check_output(callstr, shell=True)
-            stdoutWrite(p)
+            subprocess.call(callstr, shell=self._SHELL)
         except:
             stderrWrite('Error reading DEM, flat surface will be used.\n')
             self.logger.fatal('Error reading DEM, flat surface will be used')
@@ -1365,11 +1386,11 @@ class L2A_Tables(object):
             l.release()
 
         while True:
-            if(os.path.isfile(tmpFile) == True):
-                break
-            else:
+            try:
+                with open (tmpFile) as fp:
+                    break
+            except:
                 sleep(1)
-                continue
 
         if(os.path.isfile(self._TmpFile) == True):
             os.remove(self._TmpFile)
@@ -1381,6 +1402,10 @@ class L2A_Tables(object):
             os.remove(srtmf_src)
             
         os.rename(self._TmpFile, self._TmpDemFile)
+        
+        if(os.path.isfile(tmpFile) == True):
+            os.remove(tmpFile)
+        
         self.logger.info('DEM received and prepared')      
         return True
 
@@ -1394,13 +1419,12 @@ class L2A_Tables(object):
         azimuth = float32(mean(self.config.solaz_arr))
         command = 'gdaldem hillshade '
         options = '-compute_edges -az ' + str(azimuth) + ' -alt ' + str(altitude)
-        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile
+        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile + self._DEV0
 
         l.acquire()        
         try:
             os.chdir(head)
-            p = subprocess.check_output(callstr, shell=True)
-            stdoutWrite(p)
+            subprocess.call(callstr, shell=self._SHELL)  
             os.chdir(curdir)
         except:
             self.logger.fatal('shell execution error using gdaldem shade')
@@ -1419,13 +1443,12 @@ class L2A_Tables(object):
                 
         command = 'gdaldem slope '
         options = '-compute_edges'
-        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile
+        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile + self._DEV0
 
         l.acquire()
         try:
             os.chdir(head)
-            p = subprocess.check_output(callstr, shell=True)
-            stdoutWrite(p)
+            subprocess.call(callstr, shell=self._SHELL)
             os.chdir(curdir)
         except:
             self.logger.fatal('shell execution error using gdaldem slope')
@@ -1444,13 +1467,12 @@ class L2A_Tables(object):
 
         command = 'gdaldem aspect '
         options = '-compute_edges'
-        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile
+        callstr = command + options + ' ' + tmpDemFile + ' ' + tmpFile + self._DEV0 
 
         l.acquire()
         try:
             os.chdir(head)
-            p = subprocess.check_output(callstr, shell=True)
-            stdoutWrite(p)
+            subprocess.call(callstr, shell=self._SHELL)   
             os.chdir(curdir)
         except:
             self.logger.fatal('shell execution error using gdaldem aspect')
@@ -1472,7 +1494,7 @@ class L2A_Tables(object):
             l.acquire()
             os.chdir(head)
             while True:
-                try:           
+                try:
                     indataArr = gdal.Open(tail, GA_ReadOnly)
                     break
                 except:
@@ -1492,51 +1514,26 @@ class L2A_Tables(object):
             src_ncols = indataset.shape[1]
             tgt_nrows = self.config.nrows
             tgt_ncols = self.config.ncols
-            
-            test1 = indataset[:]
-            print 'Band:', bandName
-            print '============================='
-
-            print 'no resampling, mean:', test1[0:12,0:12].mean()
-            print test1[0:12,0:12]
-            # if src_nrows == tgt_nrows:
+            fullRes = indataset[:]            
+            if src_nrows == tgt_nrows:
             # no resamling required:
-            # indataArr = indataset[:]
-            # elif src_nrows > tgt_nrows:
-            a = 1
-            if a == 1:
-                # downsampling is required:
-                # first step, take first lower resolution slice.
-                indataArr = indataset[::2,::2]
-                print '10 to 20, sliced, mean: ', indataArr[0:6,0:6].mean()
-                print indataArr[0:6,0:6]
-                # for target r20 no further resampling necessary:
-                if self._resolution == 60:
-                    
-                    zoomX = float64(src_ncols*0.5)/(float64(src_ncols))
-                    zoomY = float64(src_nrows*0.5)/(float64(src_nrows))
-                    test2 = zoom(test1, ([zoomX,zoomY]), order=0)
-                    print '10 to 20, resampled, nearest, mean: ', test2[0:6,0:6].mean()
-                    print test2[0:6,0:6]
-                    test3 = zoom(test1, ([zoomX,zoomY]), order=1)
-                    print '10 to 20, resampled, bilinear, mean: ', test3[0:6,0:6].mean()
-                    print test3[0:6,0:6]
-#                     zoomX = float64(tgt_ncols)/(float64(src_ncols)*0.5)
-#                     zoomY = float64(tgt_nrows)/(float64(src_nrows)*0.5)
-#                     indataArr = zoom(indataArr, ([zoomX,zoomY]), order=0)
-#                     print '20 to 60:', indataArr.mean()
-#                     print indataArr[0:2,0:2]
-                    
-            #elif tgt_nrows > src_nrows:
-            if a == 1:    
+                indataArr = fullRes
+            elif (src_nrows / tgt_nrows) == 2:
+                # mean per 2x2 block of pixels of 10m band for 20m res
+                indataArr = uint16(block_reduce(fullRes,block_size=(2,2), func=mean)+0.5)
+            elif (src_nrows / tgt_nrows) == 3:
+                # mean per 3x3 block of pixels of 20m band for 60m res
+                indataArr = uint16(block_reduce(fullRes,block_size=(3,3), func=mean)+0.5)
+            elif (src_nrows / tgt_nrows) == 6:
+                # mean per 6x6 block of pixels of 10m band for 60m res
+                indataArr = uint16(block_reduce(fullRes,block_size=(6,6), func=mean)+0.5)
+            elif tgt_nrows > src_nrows:
                 # upsampling is required:
                 indataArr = indataset[:]
-                zoomX = float64(tgt_ncols)/float64(src_ncols)
-                zoomY = float64(tgt_nrows)/float64(src_nrows)
-                indataArr = zoom(indataArr, ([zoomX,zoomY]), order=3)
-                print 'upsampling', indataArr.mean(), 'zoomX:', zoomX, 'zoomY:', zoomY
-                print '-----------------'
-            indataset = None                
+                sizeUp = tgt_nrows
+                # order 3 is for cubic spline:
+                indataArr = (skit_resize(fullRes.astype(uint16),([sizeUp,sizeUp]),order=3)*65535.).round().astype(uint16)
+            indataset = None
                 
         if (index < 10) and (indataArr.max() == 0):
             self.logger.fatal('Band ' + bandName + ' does not contain any data')
@@ -1670,21 +1667,25 @@ class L2A_Tables(object):
         h5file.close()
         # update on UP level:
         xp = L2A_XmlParser(self.config, 'UP2A')
-        pi = xp.getTree('General_Info', 'L2A_Product_Info')
-        bl = pi.Query_Options.Band_List.BAND_NAME
-        if(self._resolution == 60):
-            # SIITBX-64: remove unsupported bands 8 and 10:
-            for i in range(len(bl)):
-                if bl[i].text == 'B8':
-                    del bl[i]
-                    continue
-                if bl[i].text == 'B10':
-                    del bl[i]
-                    break
+        # SIITBX-64: remove unsupported bands 8 and 10:
+        try:
+            pi = xp.getTree('General_Info', 'L2A_Product_Info')
+            bl = pi.Query_Options.Band_List.BAND_NAME
+            if(self._resolution == 60):
+                for i in range(len(bl)):
+                    if bl[i].text == 'B8':
+                        if self.checkAotMapIsPresent('10') == False:
+                            del bl[i]
+                        continue
+                    if bl[i].text == 'B10':
+                        del bl[i]
+                        break
+        except:
+            self.logger.info('Unsupported band entries already removed')
 
-        pic = xp.getTree('General_Info', 'L2A_Product_Image_Characteristics')
         # SIITBX-62: set to current resolution:
         try:
+            pic = xp.getTree('General_Info', 'L2A_Product_Image_Characteristics')
             si = pic.Spectral_Information_List.Spectral_Information
             if self._resolution == 60:
                 for i in range(len(si)):        
@@ -1754,19 +1755,12 @@ class L2A_Tables(object):
         if(os.path.isfile(database)):
             os.remove(database)
             
-        GRANULE = 'GRANULE'
-        globdir = os.path.join(self.config.L2A_UP_DIR, GRANULE, self.config.L2A_TILE_ID,'*','*.jp2.aux.xml')
-        for filename in glob.glob(globdir):
-            os.remove(filename)
-        globdir = os.path.join(self.config.L2A_UP_DIR, GRANULE, self.config.L2A_TILE_ID,'*','*','*.jp2.aux.xml')
-        for filename in glob.glob(globdir):
-            os.remove(filename)
-
         self.config.timestamp('L2A_Tables: stop export')
         return True
 
 
     def createPreviewImage(self):
+        from PIL import Image
         filename = self._L2A_Tile_PVI_File
         if os.path.exists(filename):
             self.logger.info('Preview Image already exists')
@@ -1812,7 +1806,7 @@ class L2A_Tables(object):
             tgt_nrows = 343.0
             zoomX = float64(tgt_ncols)/float64(src_ncols)
             zoomY = float64(tgt_nrows)/float64(src_nrows)
-            arr = zoom(arr, ([zoomX,zoomY]), order=0)        
+            arr = zoom(arr, ([zoomX,zoomY]), order=0)
 
         arrclip = arr.copy()
         min_ = 0.0
@@ -2166,6 +2160,7 @@ class L2A_Tables(object):
 
 
     def sceneCouldHaveSnow(self):
+        from PIL import Image
         globalSnowMapFn = self.config.snowMapReference
         globalSnowMapFn = os.path.join(self.config.libDir, globalSnowMapFn)
         if((os.path.isfile(globalSnowMapFn)) == False):

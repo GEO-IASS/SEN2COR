@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: sen2cor
-Version: 2.1.2
+Version: 2.2.0
 Summary: sen2cor: Sentinel 2 Level 2A Prototype Processor
 Home-page: www.telespazio-vega.de
 Author: Telespazio VEGA Deutschland GmbH
@@ -14,7 +14,7 @@ Description: sen2cor: Sentinel 2 Level 2A Prototype Processor
         It additionally performs a Scene Classification of the corresponding input.
         
         sen2cor works under the Umbrella of Anaconda (Python 2.7)
-        on the three platforms Mac OSX, Linux, and Windows 64-bit. This is mandatory! 
+        on the three platforms Mac OSX, Linux, and Windows 64-bit -this is mandatory!
         
         This Software contains an IPR of DLR. This part is no Open Source and the
         module for the Atmospheric Correction is attached to this software in form
