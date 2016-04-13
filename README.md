@@ -1,15 +1,5 @@
 sen2cor: Sentinel 2 Level 2A Prototype Processor 
 =================================================================================
+Please note: this is a private repository for internal use and does not contain essential files which are necessary to execute the software, due to a third party IPR. A full functional version of this software can be downloaded from:  http://s2tbx.telespazio-vega.de/sen2cor . The current version v2.0.0 is in preparation and will be published there after it is accepted by ESA. Please do not use this repository, it will not work.
 
-sen2cor is a Prototype Processor for processing Sentinel-2 Top of Atmosphere
-reflectance (Level 1C) data into Bottom of Atmoshperic corrected (Level 2A) data.
-It additionally performs a Scene Classification of the corresponding input.
-
-sen2cor works under the Umbrella of Anaconda (Python 2.7)
-on the three platforms Mac OSX, Linux, and Windows 64-bit -this is mandatory!
-
-This Software contains an IPR of DLR. This part is no Open Source and the
-module for the Atmospheric Correction is attached to this software in form
-of a binary library only.
-
-Please read the docs located at: http://s2tbx.telespazio-vega.de/sen2cor for further info.
+Please read the docs located at http://s2tbx.telespazio-vega.de/sen2cor for further info.
